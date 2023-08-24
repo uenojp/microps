@@ -3,17 +3,28 @@
 #include <stdio.h>
 
 #include "net.h"
+#include "platform.h"
 #include "util.h"
 
 // maximum size of IP datagram.
 #define DUMMY_MTU UINT16_MAX
 
+#define DUMMY_IRQ INTR_IRQ_BASE
+
 static int dummy_transmit(struct net_device *dev, uint16_t type, const uint8_t *data, size_t len, const void *dst) {
     debugf("dev=%s, type=0x%04x, len=%zu", dev->name, type, len);
     debugdump(data, len);
 
+    // TEST ONLY
+    intr_raise_irq(DUMMY_IRQ);
+
     // nop(drop data)
 
+    return 0;
+}
+
+static int dummy_isr(unsigned int irq, void *id) {
+    debugf("irq=%u, dev=%s", irq, ((struct net_device *)id)->name);
     return 0;
 }
 
@@ -40,6 +51,8 @@ struct net_device *dummy_init(void) {
         errorf("net_device_register() failure");
         return NULL;
     }
+
+    intr_request_irq(DUMMY_IRQ, dummy_isr, INTR_IRQ_SHARED, "dummy", dev);
 
     debugf("initialized, dev=%s", dev->name);
 
