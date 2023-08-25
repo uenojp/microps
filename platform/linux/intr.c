@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "net.h"
 #include "platform.h"
 #include "util.h"
 
@@ -97,7 +98,12 @@ static void *intr_thread(void *arg) {
                 // Stop the interrupt thread.
                 terminate = 1;
                 break;
+            case SIGUSR1:
+                // Software interrupt.
+                net_softirq_handler();
+                break;
             default:
+                // Hardware interrupt (emulated by signal).
                 // Call the interrupt handler for the IRQ.
                 for (entry = irqs; entry; entry = entry->next) {
                     if (entry->irq == (unsigned int)sig) {
@@ -151,6 +157,8 @@ int intr_init(void) {
     sigemptyset(&sigmask);
     // SIGHUP emulates interrupts from hardware.
     sigaddset(&sigmask, SIGHUP);
+    // Software interrupt.
+    sigaddset(&sigmask, SIGUSR1);
 
     return 0;
 }

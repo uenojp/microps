@@ -45,6 +45,7 @@ static inline int mutex_unlock(mutex_t *mutex) {
 // In Linux, SIGRTMIN..=SIGRTMAX are used for application signals.
 // NOTE: glibc uses SIGRTMIN internally, so we use SIGRTMIN+1 ..= SIGRTMAX.
 #define INTR_IRQ_BASE (SIGRTMIN + 1)
+#define INTR_IRQ_SOFTIRQ SIGUSR1
 
 // Flag to indicate that the IRQ number is shared.
 #define INTR_IRQ_SHARED 0x0001
