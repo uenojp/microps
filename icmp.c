@@ -1,7 +1,11 @@
 #include "icmp.h"
 
+#include <string.h>
+
 #include "ip.h"
 #include "util.h"
+
+#define ICMP_BUFSIZ IP_PAYLOAD_SIZE_MAX
 
 // ICMP header.
 struct icmp_hdr {
@@ -77,11 +81,12 @@ static void icmp_dump(const uint8_t *data, size_t len) {
 
 void icmp_input(const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst, struct ip_iface *iface) {
     // For debug log.
+    struct icmp_hdr *hdr;
     char addr1[IP_ADDR_STR_LEN];
     char addr2[IP_ADDR_STR_LEN];
 
-    if (len < ICMP_HDR_SIZE) {
-        debugf("too short");
+    if (len < sizeof(*hdr)) {
+        errorf("too short");
         return;
     }
 
@@ -93,6 +98,39 @@ void icmp_input(const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst, s
 
     debugf("%s => %s, len=%zu", ip_addr_ntop(src, addr1, sizeof(addr1)), ip_addr_ntop(dst, addr2, sizeof(addr2)), len);
     icmp_dump(data, len);
+
+    hdr = (struct icmp_hdr *)data;
+    switch (hdr->type) {
+        case ICMP_TYPE_ECHO:
+            // Responds with the address of the received interface.
+            icmp_output(ICMP_TYPE_ECHOREPLY, hdr->code, hdr->values, (void *)hdr + ICMP_HDR_SIZE, len - sizeof(*hdr), iface->unicast, src);
+            break;
+        default:
+            // ignore other types.
+            break;
+    }
+}
+
+int icmp_output(uint8_t type, uint8_t code, uint32_t values, const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst) {
+    uint8_t buf[ICMP_BUFSIZ];
+    struct icmp_hdr *hdr;
+    size_t msg_len;
+    char addr1[IP_ADDR_STR_LEN];
+    char addr2[IP_ADDR_STR_LEN];
+
+    hdr = (struct icmp_hdr *)buf;
+    hdr->type = type;
+    hdr->code = code;
+    hdr->sum = 0;
+    hdr->values = values;
+    memcpy((void *)hdr + ICMP_HDR_SIZE, data, len);
+    msg_len = sizeof(*hdr) + len;
+    hdr->sum = cksum16((uint16_t *)hdr, msg_len, 0);
+
+    debugf("%s => %s, len=%zu", ip_addr_ntop(src, addr1, sizeof(addr1)), ip_addr_ntop(dst, addr2, sizeof(addr2)), msg_len);
+    icmp_dump(buf, msg_len);
+
+    return ip_output(IP_PROTOCOL_ICMP, buf, msg_len, src, dst);
 }
 
 int icmp_init(void) {
