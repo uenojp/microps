@@ -93,6 +93,43 @@ static int net_device_close(struct net_device *dev) {
     return 0;
 }
 
+// Add the interface to the list of interfaces of the device.
+// NOTE: must not be call after net_run().
+int net_device_add_iface(struct net_device *dev, struct net_iface *iface) {
+    struct net_iface *entry;
+
+    // Check if the interface is already added.
+    for (entry = dev->ifaces; entry; entry = entry->next) {
+        if (entry->family == iface->family) {
+            // NOTE: For simplicity, only one iface can be added per family.
+            errorf("already exists, dev=%s, family=%d", dev->name, iface->family);
+            return -1;
+        }
+    }
+
+    iface->dev = dev;
+    iface->next = dev->ifaces;
+    dev->ifaces = iface;
+
+    return 0;
+}
+
+// Get the interface of the specified family from the list of interfaces of the device.
+struct net_iface *net_device_get_iface(struct net_device *dev, int family) {
+    struct net_iface *entry;
+
+    // NOTE: Since multiple interfaces of the same FAMILY cannot be registered on a single device,
+    // there is no problem with first hit.
+    for (entry = dev->ifaces; entry; entry = entry->next) {
+        if (entry->family == family) {
+            return entry;
+        }
+    }
+
+    // not found.
+    return NULL;
+}
+
 // Transmit data using the device driver's transmit function.
 int net_device_output(struct net_device *dev, uint16_t type, const uint8_t *data, size_t len, const void *dst) {
     if (!NET_DEVICE_IS_UP(dev)) {
