@@ -1,7 +1,9 @@
+#include <errno.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "net.h"
 #include "platform.h"
@@ -77,6 +79,20 @@ int intr_raise_irq(unsigned int irq) {
     return pthread_kill(tid, (int)irq);
 }
 
+static int intr_timer_setup(struct itimerspec *interval) {
+    timer_t id;
+
+    if (timer_create(CLOCK_REALTIME, NULL, &id) == -1) {
+        errorf("timer_create: %s", strerror(errno));
+        return -1;
+    }
+    if (timer_settime(id, 0, interval, NULL) == -1) {
+        errorf("timer_settime: %s", strerror(errno));
+        return -1;
+    }
+    return 0;
+}
+
 // Interrupt thread.
 static void *intr_thread(void *arg) {
     int terminate = 0;
@@ -84,9 +100,23 @@ static void *intr_thread(void *arg) {
     int err;
     struct irq_entry *entry;
 
+    // 1ms
+    const struct timespec ts = {
+        .tv_sec = 0,
+        .tv_nsec = 1000000,
+    };
+    struct itimerspec interval = {
+        .it_interval = ts,
+        .it_value = ts,
+    };
+
     debugf("start...");
     // Wait for `intr_run()` to start.
     pthread_barrier_wait(&barrier);
+    if (intr_timer_setup(&interval) == -1) {
+        errorf("intr_timer_setup() failure");
+        return NULL;
+    }
     while (!terminate) {
         err = sigwait(&sigmask, &sig);
         if (err) {
@@ -101,6 +131,9 @@ static void *intr_thread(void *arg) {
             case SIGUSR1:
                 // Software interrupt.
                 net_softirq_handler();
+                break;
+            case SIGALRM:
+                net_timer_handler();
                 break;
             default:
                 // Hardware interrupt (emulated by signal).
@@ -159,6 +192,8 @@ int intr_init(void) {
     sigaddset(&sigmask, SIGHUP);
     // Software interrupt.
     sigaddset(&sigmask, SIGUSR1);
+    // Timer interrupt.
+    sigaddset(&sigmask, SIGALRM);
 
     return 0;
 }
