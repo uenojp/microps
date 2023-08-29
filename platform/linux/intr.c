@@ -132,6 +132,9 @@ static void *intr_thread(void *arg) {
                 // Software interrupt.
                 net_softirq_handler();
                 break;
+            case SIGUSR2:
+                net_event_handler();
+                break;
             case SIGALRM:
                 net_timer_handler();
                 break;
@@ -192,6 +195,8 @@ int intr_init(void) {
     sigaddset(&sigmask, SIGHUP);
     // Software interrupt.
     sigaddset(&sigmask, SIGUSR1);
+    // Event interrupt.
+    sigaddset(&sigmask, SIGUSR2);
     // Timer interrupt.
     sigaddset(&sigmask, SIGALRM);
 
